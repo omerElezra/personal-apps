@@ -1,52 +1,66 @@
-from calendar import c
 import os
-from regex import F
+import sys
+import time
+import argparse
 import requests
+import feedparser
 import google.generativeai as genai
 from youtube_transcript_api import YouTubeTranscriptApi
-import argparse
-import sys
-import feedparser
-import time
+import logging
+from logging.handlers import RotatingFileHandler
+
+
+# Setup rotating log file
+log_handler = RotatingFileHandler(
+    filename="youtube_summary.log",
+    maxBytes=5_000_000,  # 5 MB
+    backupCount=3        # Keep last 3 logs
+)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+log_handler.setFormatter(formatter)
+
+# Setup console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+
+# Root logger setup
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.addHandler(log_handler)
+logger.addHandler(console_handler)
+
 
 def get_youtube_transcript(video_url):
-    """
-    Downloads a YouTube video's transcript and returns it as a formatted string.
-    """
     try:
-        # Extract video ID from URL
         if "v=" in video_url:
             video_id = video_url.split("v=")[1].split('&')[0]
         elif "youtu.be/" in video_url:
             video_id = video_url.split("youtu.be/")[1].split('?')[0]
         else:
-            print("Error: Invalid YouTube URL format.")
+            logger.error("Invalid YouTube URL format.")
             return None
 
-        # Attempt to get the transcript in Hebrew or English
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['he','iw', 'en'])
-        
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['he', 'iw', 'en'])
+
         formatted_transcript = ""
         for item in transcript_list:
             minutes = int(item['start']) // 60
             seconds = int(item['start']) % 60
             timestamp = f"{minutes:02d}:{seconds:02d}"
             formatted_transcript += f"[{timestamp}] {item['text']}\n"
-            
+
+        logger.info(f"Transcript fetched for video {video_id}.")
         return formatted_transcript
     except Exception as e:
-        print(f"❌ Error getting transcript: {e}")
+        logger.error(f"Error getting transcript: {e}")
         return None
 
 def summarize_with_gemini(transcript):
-    """
-    Sends the transcript to Gemini and asks for a summary with timestamps.
-    """
     if not transcript:
         return "Could not generate summary because the transcript is empty."
 
     model = genai.GenerativeModel('gemini-2.5-flash')
-    
+
     prompt = f"""
     Please summarize the following YouTube video transcript in Hebrew.
 
@@ -69,75 +83,58 @@ def summarize_with_gemini(transcript):
     
     try:
         response = model.generate_content(prompt)
+        logger.info("Summary generated with Gemini.")
         return response.text.strip()
     except Exception as e:
-        print(f"❌ Error generating summary with Gemini: {e}")
+        logger.error(f"Error generating summary with Gemini: {e}")
         return "Failed to generate summary."
 
 def send_to_telegram(message, bot_token, chat_id):
-    """
-    Sends a message to Telegram using the provided bot token and chat ID(s).
-    The chat_id parameter can be a single chat ID or a comma-separated list of chat IDs.
-    """
-    # Split the chat_id string by comma if it contains multiple chat IDs
     chat_ids = [id.strip() for id in chat_id.split(',')]
     success_count = 0
-    
+
     for single_chat_id in chat_ids:
-        if not single_chat_id:  # Skip empty IDs
+        if not single_chat_id:
             continue
-            
+
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        payload = {
-            'chat_id': single_chat_id,
-            'text': message,
-            'parse_mode': 'HTML'
-        }
-        
+        payload = {'chat_id': single_chat_id, 'text': message, 'parse_mode': 'HTML'}
+
         try:
             response = requests.post(url, json=payload)
             response.raise_for_status()
             success_count += 1
-            print(f"✅ Message sent to Telegram channel/chat {single_chat_id} successfully!")
+            logger.info(f"Message sent to Telegram chat {single_chat_id}.")
         except requests.exceptions.RequestException as e:
-            print(f"❌ Failed to send message to Telegram channel/chat {single_chat_id}: {e}")
+            logger.error(f"Error sending message to Telegram chat {single_chat_id}: {e}")
     
     if success_count > 0:
-        print(f"✅ Message sent to {success_count}/{len(chat_ids)} channels successfully")
+        logger.info(f"Message sent to {success_count}/{len(chat_ids)} channels successfully.")
     else:
-        print("❌ Failed to send message to any Telegram channel")
+        logger.error("Failed to send message to any Telegram channel.")
 
 def handle_new_video(video_url, telegram_token, telegram_chat_id):
-    """
-    Processes a single video: fetch transcript, summarize, and send to Telegram.
-    Only returns True if successful.
-    """
     try:
-        print(f"Fetching transcript for: {video_url}...")
+        logger.info(f"Processing video: {video_url}")
         transcript = get_youtube_transcript(video_url)
-        
+
         if transcript:
-            print("🧠 Transcript fetched. Summarizing with Gemini...")
             summary = summarize_with_gemini(transcript)
-            print(f"✈️ Summary generated. Sending to Telegram (channels: {telegram_chat_id})...")
-            final_message = f"📄 *סיכום עבור הסרטון:*\n`{video_url}`\n\n{summary}"
+            final_message = f"📄 *Summary for video:*\n`{video_url}`\n\n{summary}"
             send_to_telegram(final_message, telegram_token, telegram_chat_id)
-            return True  # success
+            return True
         else:
-            print("Transcript not yet available. Will retry later.")
-            return False  # failure
+            logger.warning("Transcript not available yet. Will retry later.")
+            return False
     except Exception as e:
-        print(f"❌ Error handling new video: {e}")
-        error_message = f"נכשלתי בעיבוד הסרטון:\n{video_url}\nשגיאה: {str(e)}"
+        logger.error(f"Error handling video: {e}")
         # Only send errors to the first chat ID to avoid spamming all channels with errors
         first_chat_id = telegram_chat_id.split(',')[0].strip()
+        error_message = f"⚠️ *Error processing video:*\n`{video_url}`\n\n{str(e)}"
         send_to_telegram(error_message, telegram_token, first_chat_id)
         return False
 
 def watch_youtube_channel(channel_id, telegram_token, telegram_chat_id, check_interval=10):
-    """
-    Watch a YouTube channel for new videos and call handle_new_video().
-    """
     rss_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
     seen_videos = set()
 
@@ -146,7 +143,7 @@ def watch_youtube_channel(channel_id, telegram_token, telegram_chat_id, check_in
     # for entry in feed.entries:
     #     seen_videos.add(entry.yt_videoid)
 
-    print(f"👀 Watching YouTube channel: {channel_id}")
+    logger.info(f"Watching YouTube channel {channel_id}.")
 
     while True:
         try:
@@ -155,51 +152,34 @@ def watch_youtube_channel(channel_id, telegram_token, telegram_chat_id, check_in
                 video_id = entry.yt_videoid
                 if video_id not in seen_videos:
                     video_url = f"https://youtu.be/{video_id}"
-                    print(f"📹 New video detected: {video_url}")
+                    logger.info(f"New video detected: {video_url}")
                     success = handle_new_video(video_url, telegram_token, telegram_chat_id)
                     if success:
                         seen_videos.add(video_id)
         except Exception as e:
-            print(f"❌ Error: {e}")
+            logger.error(f"Error while watching channel: {e}")
         time.sleep(check_interval)
 
 def main():
-    try:
-        parser = argparse.ArgumentParser(
-            description="Summarize a YouTube video and send the summary to Telegram.",
-            formatter_class=argparse.RawTextHelpFormatter
-        )
-        
-        parser.add_argument("--video-url", help="The full URL of the YouTube video to summarize.", required=False)
-        parser.add_argument("--gemini-key", default=os.getenv("GEMINI_API_KEY"),
-                            help="Gemini API Key. (or set GEMINI_API_KEY env var)")
-        parser.add_argument("--telegram-token", default=os.getenv("TELEGRAM_BOT_TOKEN"),
-                            help="Telegram Bot Token. (or set TELEGRAM_BOT_TOKEN env var)")
-        parser.add_argument("--telegram-chat-id", default=os.getenv("TELEGRAM_CHAT_ID"),
-                            help="Comma-separated list of Telegram Chat IDs. (or set TELEGRAM_CHAT_ID env var)")
-        parser.add_argument("--channal_id", default=os.getenv("YOUTUBE_CHANNEL_ID"),
-                            help="YouTube Channel ID to watch for new videos.", required=False)
-        args = parser.parse_args()
+    parser = argparse.ArgumentParser(description="Summarize a YouTube video and send the summary to Telegram.")
+    parser.add_argument("--video-url", help="YouTube video URL")
+    parser.add_argument("--gemini-key", default=os.getenv("GEMINI_API_KEY"), help="Gemini API Key")
+    parser.add_argument("--telegram-token", default=os.getenv("TELEGRAM_BOT_TOKEN"), help="Telegram Bot Token")
+    parser.add_argument("--telegram-chat-id", default=os.getenv("TELEGRAM_CHAT_ID"), help="Telegram Chat ID(s), comma-separated if multiple")
+    parser.add_argument("--channel-id", default=os.getenv("YOUTUBE_CHANNEL_ID"), help="YouTube Channel ID")
+    args = parser.parse_args()
 
-        if not all([args.gemini_key, args.telegram_token, args.telegram_chat_id]):
-            print("🔴 Error: Missing credentials.")
-            sys.exit(1)
-
-        try:
-            genai.configure(api_key=args.gemini_key)
-        except Exception as e:
-            print(f"🔴 Error configuring Gemini API: {e}")
-            sys.exit(1)
-
-        if not args.video_url:
-            print("🔄 Watching YouTube channel for new videos...")
-            watch_youtube_channel(args.channal_id, args.telegram_token, args.telegram_chat_id, check_interval=0.1)
-        else:
-            print(f"🔄 Processing video URL: {args.video_url}")
-            handle_new_video(args.video_url, args.telegram_token, args.telegram_chat_id)
-    except Exception as e:
-        print(f"🔴 Unexpected error: {e}")
+    if not all([args.gemini_key, args.telegram_token, args.telegram_chat_id]):
+        logger.error("Missing API credentials.")
         sys.exit(1)
+
+    genai.configure(api_key=args.gemini_key)
+
+    if args.video_url:
+        handle_new_video(args.video_url, args.telegram_token, args.telegram_chat_id)
+    else:
+        watch_youtube_channel(args.channel_id, args.telegram_token, args.telegram_chat_id)
+
 
 if __name__ == "__main__":
     main()
