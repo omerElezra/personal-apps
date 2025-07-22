@@ -58,22 +58,10 @@ export YOUTUBE_CHANNEL_ID="channel_id_to_monitor"
 4. Run the project:
 ```bash
 # Process a specific video
-python youtune-summerizer.py --video-url https://youtu.be/video_id
+python youtube-summerizer.py --video-url https://youtu.be/video_id
 
 # Or monitor a channel for new videos
-python youtune-summerizer.py
-```
-
-## 📝 Usage Examples
-
-### Summarize a specific video
-```bash
-python youtune-summerizer.py --video-url https://youtu.be/abc123
-```
-
-### Monitor a channel with custom settings
-```bash
-python youtune-summerizer.py --channel-id UC123456789 --telegram-chat-id "-1001234567,-1009876543" --gemini-key "YOUR_KEY"
+python youtube-summerizer.py
 ```
 
 ## 🔄 CI/CD Pipeline (Coming Soon)
