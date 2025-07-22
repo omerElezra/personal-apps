@@ -76,21 +76,36 @@ def summarize_with_gemini(transcript):
 
 def send_to_telegram(message, bot_token, chat_id):
     """
-    Sends a message to Telegram using the provided bot token and chat ID.
+    Sends a message to Telegram using the provided bot token and chat ID(s).
+    The chat_id parameter can be a single chat ID or a comma-separated list of chat IDs.
     """
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {
-        'chat_id': chat_id,
-        'text': message,
-        'parse_mode': 'HTML'
-    }
+    # Split the chat_id string by comma if it contains multiple chat IDs
+    chat_ids = [id.strip() for id in chat_id.split(',')]
+    success_count = 0
     
-    try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()
-        print("✅ Message sent to Telegram successfully!")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Failed to send message to Telegram: {e}")
+    for single_chat_id in chat_ids:
+        if not single_chat_id:  # Skip empty IDs
+            continue
+            
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {
+            'chat_id': single_chat_id,
+            'text': message,
+            'parse_mode': 'HTML'
+        }
+        
+        try:
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            success_count += 1
+            print(f"✅ Message sent to Telegram channel/chat {single_chat_id} successfully!")
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Failed to send message to Telegram channel/chat {single_chat_id}: {e}")
+    
+    if success_count > 0:
+        print(f"✅ Message sent to {success_count}/{len(chat_ids)} channels successfully")
+    else:
+        print("❌ Failed to send message to any Telegram channel")
 
 def handle_new_video(video_url, telegram_token, telegram_chat_id):
     """
@@ -104,7 +119,7 @@ def handle_new_video(video_url, telegram_token, telegram_chat_id):
         if transcript:
             print("🧠 Transcript fetched. Summarizing with Gemini...")
             summary = summarize_with_gemini(transcript)
-            print("✈️ Summary generated. Sending to Telegram...")
+            print(f"✈️ Summary generated. Sending to Telegram (channels: {telegram_chat_id})...")
             final_message = f"📄 *סיכום עבור הסרטון:*\n`{video_url}`\n\n{summary}"
             send_to_telegram(final_message, telegram_token, telegram_chat_id)
             return True  # success
@@ -114,7 +129,9 @@ def handle_new_video(video_url, telegram_token, telegram_chat_id):
     except Exception as e:
         print(f"❌ Error handling new video: {e}")
         error_message = f"נכשלתי בעיבוד הסרטון:\n{video_url}\nשגיאה: {str(e)}"
-        send_to_telegram(error_message, telegram_token, telegram_chat_id)
+        # Only send errors to the first chat ID to avoid spamming all channels with errors
+        first_chat_id = telegram_chat_id.split(',')[0].strip()
+        send_to_telegram(error_message, telegram_token, first_chat_id)
         return False
 
 def watch_youtube_channel(channel_id, telegram_token, telegram_chat_id, check_interval=10):
@@ -159,7 +176,7 @@ def main():
         parser.add_argument("--telegram-token", default=os.getenv("TELEGRAM_BOT_TOKEN"),
                             help="Telegram Bot Token. (or set TELEGRAM_BOT_TOKEN env var)")
         parser.add_argument("--telegram-chat-id", default=os.getenv("TELEGRAM_CHAT_ID"),
-                            help="Telegram Chat ID. (or set TELEGRAM_CHAT_ID env var)")
+                            help="Comma-separated list of Telegram Chat IDs. (or set TELEGRAM_CHAT_ID env var)")
         parser.add_argument("--channal_id", default=os.getenv("YOUTUBE_CHANNEL_ID"),
                             help="YouTube Channel ID to watch for new videos.", required=False)
         args = parser.parse_args()
