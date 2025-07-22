@@ -15,7 +15,7 @@ An intelligent automation tool that:
 - Distributes summaries to multiple Telegram channels simultaneously
 
 ```bash
-python youtune-summerizer.py --video-url https://youtu.be/video_id
+python youtube-summerizer.py --video-url https://youtu.be/video_id
 ```
 
 ### 🔮 Future Projects
