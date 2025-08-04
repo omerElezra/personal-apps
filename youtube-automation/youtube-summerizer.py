@@ -138,7 +138,7 @@ def watch_youtube_channel(channel_id, telegram_token, telegram_chat_id, check_in
     rss_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
     seen_videos = set()
 
-    # Inintialize seen_videos with existing videos from the RSS feed for the first run
+    # Initialize seen_videos with existing videos from the RSS feed for the first run
     feed = feedparser.parse(rss_url)
     for entry in feed.entries:
         seen_videos.add(entry.yt_videoid)
