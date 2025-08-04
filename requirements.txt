@@ -1,0 +1,24 @@
+# Master requirements file for all tools
+# Install all dependencies with: pip install -r requirements.txt
+
+# Financial Tools Dependencies
+pandas>=2.0.0
+matplotlib>=3.7.0
+mplfinance>=0.12.9
+yfinance>=0.2.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# YouTube Automation Dependencies  
+youtube-transcript-api>=0.6.0
+feedparser>=6.0.0
+
+# Shared Dependencies
+google-generativeai>=0.3.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+pillow>=10.0.0
+
+# Optional dependencies (can be installed separately)
+# torch  # Only needed if using advanced ML features
+# websockets  # Only needed for real-time features
