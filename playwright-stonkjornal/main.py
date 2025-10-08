@@ -632,8 +632,10 @@ if __name__ == "__main__":
         trades_list = parse_csv_file(args.csv_file)
         
         if not trades_list:
-            print("\n✗ No trades found in CSV file or error reading file!")
-            exit(1)
+            print("\n[INFO] No trades matching filters found in CSV file.")
+            print("[INFO] Filters applied: LevelOfDetail='EXECUTION' AND CurrencyPrimary='USD'")
+            print("[INFO] Nothing to process. Exiting successfully.")
+            exit(0)
         
         # Convert each trade dict to trade object
         for trade_dict in trades_list:
