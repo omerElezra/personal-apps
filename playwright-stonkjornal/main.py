@@ -8,7 +8,6 @@ import csv
 import pytz
 from pathlib import Path
 
-from tenacity import retry
 
 def parse_arguments():
     """Parse command line arguments for trade automation"""
