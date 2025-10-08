@@ -8,9 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY requirements.txt /app/requirements.txt
 COPY app.py /app/app.py
 
-RUN pip install --no-cache-dir fastapi uvicorn requests playwright pytz tenacity\
+RUN pip install --no-cache-dir -r requirements.txt \
  && python -m playwright install --with-deps chromium
 
 ENV PORT=8080

@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  stonkjournal-automation:
+    build: .
+    container_name: stonkjournal-service
+    ports:
+      - "8080:8080"
+    environment:
+      - BEARER_TOKEN=${BEARER_TOKEN}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
