@@ -1,7 +1,6 @@
 import os
 import tempfile
 import subprocess
-from huggingface_hub import webhook_endpoint
 import requests
 import shlex
 import logging
@@ -19,6 +18,18 @@ RAW_URL = "https://raw.githubusercontent.com/omerElezra/personal-apps/refs/heads
 BEARER = os.getenv("BEARER_TOKEN", "")  # Authentication for Webhook service
 
 app = FastAPI(title="StonkJournal Trade Automation Service")
+
+@app.get("/")
+def root():
+    """Root endpoint"""
+    return {
+        "service": "StonkJournal Trade Automation",
+        "version": "1.0",
+        "endpoints": {
+            "health": "/healthz",
+            "ingest": "/ingest (POST)"
+        }
+    }
 
 @app.get("/healthz")
 def healthz():
@@ -47,7 +58,6 @@ async def ingest(request: Request):
     # Extract credentials from headers
     username = request.headers.get("x-username")
     password = request.headers.get("x-password")
-    webhook_url = request.headers.get("x-webhook-url")
     filename = request.headers.get("x-filename", "report.csv")
     
     if not username or not password:
@@ -57,9 +67,10 @@ async def ingest(request: Request):
     # Read CSV body
     csv_bytes = await request.body()
     if not csv_bytes:
+        logger.error("Empty CSV body received")
         raise HTTPException(status_code=400, detail="Empty CSV body")
 
-    logger.info(f"Processing CSV file: {filename} for user: {username} to webhook: {webhook_url}")
+    logger.info(f"Processing CSV file: {filename} for user: {username}")
 
     # Download latest main.py script
     try:
