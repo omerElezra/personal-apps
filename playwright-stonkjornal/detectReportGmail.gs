@@ -75,7 +75,7 @@ function processNewReports() {
             console.error(`Webhook error ${code}: ${resp.getContentText()}`);
             // Don't label - so next run will retry
             continue;
-          } else{
+          } else {
             // Mark as processed + apply label
             dedup.mark(id);
             if (mid) dedup.mark(mid);
