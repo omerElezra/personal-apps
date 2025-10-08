@@ -14,7 +14,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-RAW_URL = "https://raw.githubusercontent.com/omerElezra/personal-apps/refs/heads/main/playwright-stonkjornal/main.py"
+RAW_URL = os.getenv(
+    "RAW_URL",
+    "https://raw.githubusercontent.com/omerElezra/personal-apps/refs/heads/main/playwright-stonkjornal/main.py"
+)
 BEARER = os.getenv("BEARER_TOKEN", "")  # Authentication for Webhook service
 
 app = FastAPI(title="StonkJournal Trade Automation Service")
