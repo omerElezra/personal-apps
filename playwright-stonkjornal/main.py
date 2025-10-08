@@ -24,7 +24,7 @@ def parse_arguments():
     p.add_argument("--action", choices=["BUY", "SELL"], default="BUY", help="Trade action (default: BUY)")
     p.add_argument("--datetime", dest="dt", help="MM/DD/YYYY,HH:MM (default: today,00:21)")
     # Runtime options
-    p.add_argument("--headful", action="store_true:", help="Run in headed mode (show browser)")
+    p.add_argument("--headful", action="store_true", help="Run in headed mode (show browser)")
     return p.parse_args()
 
 def login_to_stonkjournal(page, username, password):
