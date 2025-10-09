@@ -145,7 +145,7 @@ def verify_page_loaded_and_check_trades(page):
         print("\n[INFO] Verifying page loaded and checking for trades...")
         
         # Wait for page to be in a stable state with retries
-        max_retries = 30
+        max_retries = 300
         for attempt in range(max_retries):
             try:
                 print(f"[INFO] Attempt {attempt + 1}/{max_retries} to verify page load...")
