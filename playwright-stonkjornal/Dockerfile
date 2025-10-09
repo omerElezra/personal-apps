@@ -34,7 +34,8 @@ COPY app.py /app/app.py
 # Install Python dependencies and Playwright chromium (without system deps since we installed them manually)
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt \
- && playwright install chromium
+ && playwright install chromium \
+ && playwright install chrome
 
 ENV PORT=8080
 EXPOSE 8080
