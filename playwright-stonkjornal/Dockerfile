@@ -4,6 +4,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg \
+    vim \
     ca-certificates \
     libnss3 \
     libnspr4 \

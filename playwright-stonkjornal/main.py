@@ -162,7 +162,7 @@ def verify_page_loaded_and_check_trades(page):
                     return True, trades_count
                 else:
                     if attempt < max_retries - 1:
-                        print("[WARN] No trades found. Refreshing page and retrying...")
+                        print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
                         page.reload(wait_until="domcontentloaded", timeout=30000)
                         time.sleep(10)
                     else:
