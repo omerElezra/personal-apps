@@ -170,7 +170,7 @@ def verify_page_loaded_and_check_trades(page):
                 print(f"[WARN] Error checking trades (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     print("[INFO] 🔄 Refreshing page and retrying...")
-                    page.relNavigating to StonkJournaload(wait_until="domcontentloaded", timeout=30000)
+                    page.reload(wait_until="domcontentloaded", timeout=30000)
                     time.sleep(3)  # Wait for page to stabilize
                 else:
                     print("[ERROR] Failed to verify page load after all retries")        
