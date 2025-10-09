@@ -145,7 +145,7 @@ def verify_page_loaded_and_check_trades(page):
         print("\n[INFO] Verifying page loaded and checking for trades...")
         
         # Wait for page to be in a stable state with retries
-        max_retries = 3
+        max_retries = 10
         for attempt in range(max_retries):
             try:
                 print(f"[INFO] Attempt {attempt + 1}/{max_retries} to verify page load...")
@@ -681,22 +681,16 @@ if __name__ == "__main__":
     with sync_playwright() as p:
         # Launch browser with options optimized for both headed and headless modes
         browser = p.chromium.launch(
+            channel="chrome",
             headless=not args.headful,
             args=[
-                '--disable-blink-features=AutomationControlled',  # Avoid detection
-                '--no-sandbox',  # Required for Docker/Cloud Run
-                '--disable-dev-shm-usage',  # Overcome limited resource problems
-            ]
+                "--headless=new" if not args.headful else "",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ],
         )
         
-        # Create context with realistic browser settings
-        context = browser.new_context(
-            viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            locale='en-US',
-            timezone_id='America/New_York'
-        )
-        
+        context = browser.new_context()
         page = context.new_page()
         
         try:

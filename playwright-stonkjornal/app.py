@@ -101,7 +101,7 @@ async def ingest(request: Request):
             f"--username {shlex.quote(username)} "
             f"--password {shlex.quote(password)} "
             f"--csv-file {shlex.quote(csv_path)}"
-            f"--headful"
+            # f"--headful"
         )
         
         logger.info(f"Executing automation script for {filename}")
