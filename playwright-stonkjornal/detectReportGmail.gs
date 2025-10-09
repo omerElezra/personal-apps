@@ -72,7 +72,25 @@ function processNewReports() {
 
           const code = resp.getResponseCode();
           if (code < 200 || code >= 300) {
-            console.error(`Webhook error ${code}: ${resp.getContentText()}`);
+            const errorMsg = resp.getContentText();
+            console.error(`Webhook error ${code}: ${errorMsg}`);
+            
+            // Try to parse error response for screenshot
+            let screenshotData = null;
+            let screenshotName = null;
+            try {
+              const errorJson = JSON.parse(errorMsg);
+              if (errorJson.detail && typeof errorJson.detail === 'object') {
+                screenshotData = errorJson.detail.screenshot;
+                screenshotName = errorJson.detail.screenshot_name;
+              }
+            } catch (e) {
+              // Not JSON or no screenshot, that's okay
+            }
+            
+            // Send email alert about the error with screenshot if available
+            sendErrorEmail(username, filename, code, errorMsg, msg.getSubject(), msg.getDate(), screenshotData, screenshotName);
+            
             // Don't label - so next run will retry
             continue;
           } else {
@@ -103,6 +121,92 @@ function getOrCreateLabel(name) {
   let label = GmailApp.getUserLabelByName(name);
   if (!label) label = GmailApp.createLabel(name);
   return label;
+}
+
+/**
+ * Send error notification email when webhook fails
+ * @param {string} recipientEmail - Email address to send alert to (StonkJournal username)
+ * @param {string} filename - CSV filename that failed
+ * @param {number} errorCode - HTTP error code
+ * @param {string} errorMessage - Error message from webhook
+ * @param {string} emailSubject - Original email subject
+ * @param {Date} emailDate - Original email date
+ * @param {string} screenshotData - Base64 encoded PNG screenshot (optional)
+ * @param {string} screenshotName - Screenshot filename (optional)
+ */
+function sendErrorEmail(recipientEmail, filename, errorCode, errorMessage, emailSubject, emailDate, screenshotData, screenshotName) {
+  try {
+    const subject = `⚠️ StonkJournal Automation Error - ${filename}`;
+    
+    const body = `
+StonkJournal Trade Automation Error Alert
+==========================================
+
+An error occurred while processing your Interactive Brokers report.
+
+ERROR DETAILS:
+--------------
+HTTP Status Code: ${errorCode}
+Error Message: ${errorMessage}
+
+REPORT DETAILS:
+---------------
+CSV Filename: ${filename}
+Original Email Subject: ${emailSubject}
+Email Received: ${Utilities.formatDate(emailDate, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss z')}
+
+WEBHOOK INFORMATION:
+--------------------
+Webhook URL: ${PropertiesService.getScriptProperties().getProperty('WEBHOOK_URL')}
+Processing Time: ${new Date().toLocaleString()}
+
+TROUBLESHOOTING:
+----------------
+1. Check if the webhook service is running
+2. Verify BEARER_TOKEN is configured correctly
+3. Check Cloud Run logs: gcloud run services logs tail gmail-csv-webhook --project=stocks-report-474512 --region=me-west1
+4. Verify USERNAME and PASSWORD are correct
+5. Check if the CSV format is compatible
+${screenshotData ? '\n6. Review the attached error screenshot for visual debugging' : ''}
+
+NEXT STEPS:
+-----------
+- The system will automatically retry processing this email in the next run
+- If the error persists, check the webhook service logs
+- You can manually trigger processing by running the debugOnce() function
+
+---
+This is an automated alert from StonkJournal Trade Automation
+Configured in Google Apps Script: ${ScriptApp.getScriptId()}
+`;
+
+    // Prepare email options
+    const emailOptions = {};
+    
+    // Attach screenshot if available
+    if (screenshotData && screenshotName) {
+      try {
+        const imageBlob = Utilities.newBlob(
+          Utilities.base64Decode(screenshotData),
+          'image/png',
+          screenshotName
+        );
+        emailOptions.attachments = [imageBlob];
+        console.log(`Attaching screenshot: ${screenshotName}`);
+      } catch (e) {
+        console.error(`Failed to decode screenshot: ${e.message}`);
+        // Continue without attachment
+      }
+    }
+
+    // Send email to the user
+    GmailApp.sendEmail(recipientEmail, subject, body, emailOptions);
+    console.log(`Error notification sent to ${recipientEmail}${screenshotData ? ' with screenshot' : ''}`);
+    
+  } catch (e) {
+    console.error(`Failed to send error email: ${e.message}`);
+    // Don't throw - we don't want email failure to break the main flow
+  }
 }
 
 // Deduplication based on PropertiesService (persistent across runs)

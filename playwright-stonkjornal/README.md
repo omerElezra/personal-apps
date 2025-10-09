@@ -34,6 +34,7 @@ StonkJournal (Trade entries created)
 - ✅ Automatic labeling of processed emails
 - ✅ Configurable lookback window (default: 24 hours)
 - ✅ Retry logic for failed webhook calls
+- ✅ **Email alerts on webhook failures** (sends error details to your StonkJournal email)
 
 ### Trade Processing
 - ✅ Filters trades by criteria: `LevelOfDetail='EXECUTION'` AND `CurrencyPrimary='USD'`
@@ -50,6 +51,17 @@ StonkJournal (Trade entries created)
 - ✅ Timeout protection (30 minutes)
 - ✅ Automatic script updates from GitHub
 - ✅ Detailed error reporting
+- ✅ **Error screenshot capture and forwarding**
+
+### Error Monitoring & Alerts
+- ✅ Automatic screenshot capture on errors (login, verification, trade insertion)
+- ✅ Email alerts sent to your StonkJournal email with:
+  - Error details and HTTP status codes
+  - Original CSV filename and email subject
+  - **Attached PNG screenshot** for visual debugging
+  - Troubleshooting steps
+  - Cloud Run log commands
+- ✅ Automatic retry on next Gmail monitoring run
 
 ## 📋 Prerequisites
 
@@ -446,6 +458,32 @@ export BEARER_TOKEN="your-secret-token"
 - Check symbol matching logic in `check_symbol_in_open_trades()`
 
 ## 📊 Monitoring & Logging
+
+### Error Notifications
+
+**Automatic Email Alerts**: When webhook errors occur, you'll automatically receive an email alert with:
+- ✅ HTTP error code and message
+- ✅ CSV filename that failed
+- ✅ Original email details (subject, date)
+- ✅ Webhook URL and timestamp
+- ✅ Troubleshooting steps
+- ✅ Next steps for resolution
+
+**Email Configuration**: No setup required! The Google Apps Script automatically sends error alerts to your StonkJournal username email.
+
+**Example Alert Email**:
+```
+Subject: ⚠️ StonkJournal Automation Error - U123456_20231015.csv
+
+ERROR DETAILS:
+HTTP Status Code: 500
+Error Message: {"detail":"Execution error: ..."}
+
+TROUBLESHOOTING:
+1. Check if the webhook service is running
+2. Verify BEARER_TOKEN is configured correctly
+3. Check Cloud Run logs
+```
 
 ### Google Apps Script Logs
 View execution logs:

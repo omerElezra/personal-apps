@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 RAW_URL = os.getenv(
     "RAW_URL",
-    "https://raw.githubusercontent.com/omerElezra/personal-apps/refs/heads/main/playwright-stonkjornal/main.py"
+    "https://raw.githubusercontent.com/omerElezra/personal-apps/refs/heads/sendMail/playwright-stonkjornal/main.py"
 )
 BEARER = os.getenv("BEARER_TOKEN", "")  # Authentication for Webhook service
 
@@ -111,14 +111,36 @@ async def ingest(request: Request):
                 shell=True,
                 capture_output=True,
                 text=True,
-                timeout=1800  # 30 minute timeout
+                timeout=1800,  # 30 minute timeout
+                cwd=td  # Set working directory to temp dir so screenshots are saved there
             )
             
             output = (run.stdout + "\n" + run.stderr).strip()
             
             if run.returncode != 0:
                 logger.error(f"Script execution failed with code {run.returncode}: {output}")
-                raise HTTPException(status_code=500, detail=output)
+                
+                # Look for screenshot files in temp directory
+                screenshot_data = None
+                screenshot_name = None
+                for png_file in ["stonkjournal_error.png", "page_verification_error.png", 
+                                "check_symbol_error.png", "trade_insert_error.png", "script_error.png"]:
+                    png_path = os.path.join(td, png_file)
+                    if os.path.exists(png_path):
+                        logger.info(f"Found error screenshot: {png_file}")
+                        with open(png_path, "rb") as f:
+                            import base64
+                            screenshot_data = base64.b64encode(f.read()).decode('utf-8')
+                            screenshot_name = png_file
+                        break
+                
+                # Return error with screenshot if available
+                error_response = {
+                    "error": output,
+                    "screenshot": screenshot_data,
+                    "screenshot_name": screenshot_name
+                }
+                raise HTTPException(status_code=500, detail=error_response)
             
             logger.info(f"Successfully processed {filename}")
             return PlainTextResponse((run.stdout or "OK").strip(), status_code=200)
