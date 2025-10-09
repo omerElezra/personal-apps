@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxshmfence1 \
     fonts-liberation \
     fonts-noto-color-emoji \
+    xvfb \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -39,5 +40,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 ENV PORT=8080
 EXPOSE 8080
-CMD ["uvicorn","app:app","--host","0.0.0.0","--port","8080"]
+
+# IMPORTANT: run your server under xvfb-run (virtual display 1920x1080x24)
+CMD ["bash","-lc","xvfb-run -a -s '-screen 0 1920x1080x24' uvicorn app:app --host 0.0.0.0 --port $PORT"]
 

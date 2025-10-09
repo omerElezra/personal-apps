@@ -8,7 +8,6 @@ import csv
 import pytz
 from pathlib import Path
 
-
 def parse_arguments():
     """Parse command line arguments for trade automation"""
     p = argparse.ArgumentParser(description="StonkJournal Trade Automation (Playwright)")
@@ -105,7 +104,13 @@ def login_to_stonkjournal(page, username, password):
             print(f"[WARN] Dashboard URL wait timeout: {e}")
 
         time.sleep(3)
-        page.screenshot(path="stonkjournal_error.png")
+        AUTH_STATE_PATH = os.getenv("SJ_AUTH_STATE", "/tmp/stonkjournal-auth.json")
+        try:
+            page.wait_for_load_state("networkidle")
+            page.context.storage_state(path=AUTH_STATE_PATH)
+            print(f"[INFO] ✓ Saved storage_state to {AUTH_STATE_PATH}")
+        except Exception as e:
+            print(f"[WARN] Could not save storage_state after login: {e}")
         return True
 
     except Exception as e:
@@ -681,16 +686,28 @@ if __name__ == "__main__":
     with sync_playwright() as p:
         # Launch browser with options optimized for both headed and headless modes
         browser = p.chromium.launch(
-            channel="chromium",
-            headless=not args.headful,
+            channel="chrome",  # use real Chrome if available
+            headless=(False if os.getenv("RUN_UNDER_XVFB") == "1" else not args.headful),
             args=[
-                "--headless=new" if not args.headful else "",
-                "--no-sandbox", 
+                "--no-sandbox",
                 "--disable-dev-shm-usage",
+                # use new headless only when actually headless
+                *(["--headless=new"] if os.getenv("RUN_UNDER_XVFB") != "1" and not args.headful else []),
             ],
         )
-        
-        context = browser.new_context()
+
+        AUTH_STATE = os.getenv("SJ_AUTH_STATE", "/tmp/stonkjournal-auth.json")  # at top once
+
+        kwargs = {
+            "viewport": {"width": 1920, "height": 1080},
+            "locale": "en-US",
+            "timezone_id": "America/New_York",
+        }
+        if Path(AUTH_STATE).exists():
+            kwargs["storage_state"] = AUTH_STATE  # reuse previous login
+
+        context = browser.new_context(**kwargs)
+
         page = context.new_page()
         
         try:
@@ -764,7 +781,15 @@ if __name__ == "__main__":
                 print("\n✓ All trades completed successfully!")
             else:
                 print(f"\n⚠ Completed with {failed_trades} failure(s)")
-            
+                        # (5) persist storage at the end of the run as well
+            AUTH_STATE_PATH = os.getenv("SJ_AUTH_STATE", "/tmp/stonkjournal-auth.json")
+            try:
+                page.wait_for_load_state("networkidle")
+                page.context.storage_state(path=AUTH_STATE_PATH)
+                print(f"[INFO] ✓ Saved storage_state to {AUTH_STATE_PATH} (post-run)")
+            except Exception as e:
+                print(f"[WARN] Could not save storage_state at end of run: {e}")
+
         except Exception as e:
             print(f"\n✗ Script failed with error: {str(e)}")
             page.screenshot(path="script_error.png")
