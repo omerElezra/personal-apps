@@ -33,7 +33,7 @@ def login_to_stonkjournal(page, username, password):
     """
     try:
         print("Navigating to StonkJournal dashboard...")
-        page.goto("https://app.stonkjournal.com/dashboard/", timeout=30000)
+        page.goto("https://app.stonkjournal.com/", timeout=30000)
 
         # Wait for the page to load
         page.wait_for_load_state("domcontentloaded")
@@ -104,10 +104,8 @@ def login_to_stonkjournal(page, username, password):
         except Exception as e:
             print(f"[WARN] Dashboard URL wait timeout: {e}")
 
-
-        # Keep open briefly
-        time.sleep(10)
-        
+        time.sleep(3)
+        page.screenshot(path="stonkjournal_error.png")
         return True
 
     except Exception as e:
@@ -147,7 +145,7 @@ def verify_page_loaded_and_check_trades(page):
         print("\n[INFO] Verifying page loaded and checking for trades...")
         
         # Wait for page to be in a stable state with retries
-        max_retries = 10
+        max_retries = 3
         for attempt in range(max_retries):
             try:
                 print(f"[INFO] Attempt {attempt + 1}/{max_retries} to verify page load...")
@@ -164,7 +162,7 @@ def verify_page_loaded_and_check_trades(page):
                     if attempt < max_retries - 1:
                         print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
                         page.reload(wait_until="domcontentloaded", timeout=30000)
-                        time.sleep(10)
+                        time.sleep(5)
                     else:
                         print("[WARN] No trades found after all retries")
                         return False, 0
@@ -681,8 +679,24 @@ if __name__ == "__main__":
 
     # Create browser session (one session for all trades)
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=not args.headful)
-        context = browser.new_context()
+        # Launch browser with options optimized for both headed and headless modes
+        browser = p.chromium.launch(
+            headless=not args.headful,
+            args=[
+                '--disable-blink-features=AutomationControlled',  # Avoid detection
+                '--no-sandbox',  # Required for Docker/Cloud Run
+                '--disable-dev-shm-usage',  # Overcome limited resource problems
+            ]
+        )
+        
+        # Create context with realistic browser settings
+        context = browser.new_context(
+            viewport={'width': 1920, 'height': 1080},
+            user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            locale='en-US',
+            timezone_id='America/New_York'
+        )
+        
         page = context.new_page()
         
         try:
@@ -702,7 +716,7 @@ if __name__ == "__main__":
             
             print(f"\n[INFO] Page verified with {trades_count} trade(s) displayed")
             
-            # Step 4: Process all trades in sequence
+            # Step 3: Process all trades in sequence
             successful_trades = 0
             failed_trades = 0
             total_trades = len(trades_to_process)
