@@ -145,7 +145,7 @@ def verify_page_loaded_and_check_trades(page):
         print("\n[INFO] Verifying page loaded and checking for trades...")
         
         # Wait for page to be in a stable state with retries
-        max_retries = 10
+        max_retries = 30
         for attempt in range(max_retries):
             try:
                 print(f"[INFO] Attempt {attempt + 1}/{max_retries} to verify page load...")
@@ -162,7 +162,7 @@ def verify_page_loaded_and_check_trades(page):
                     if attempt < max_retries - 1:
                         print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
                         page.reload(wait_until="domcontentloaded", timeout=30000)
-                        time.sleep(10)
+                        time.sleep(3)
                     else:
                         print("[WARN] No trades found after all retries")
                         return False, 0
@@ -170,7 +170,7 @@ def verify_page_loaded_and_check_trades(page):
                 print(f"[WARN] Error checking trades (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     print("[INFO] 🔄 Refreshing page and retrying...")
-                    page.reload(wait_until="domcontentloaded", timeout=30000)
+                    page.relNavigating to StonkJournaload(wait_until="domcontentloaded", timeout=30000)
                     time.sleep(3)  # Wait for page to stabilize
                 else:
                     print("[ERROR] Failed to verify page load after all retries")        
@@ -681,11 +681,11 @@ if __name__ == "__main__":
     with sync_playwright() as p:
         # Launch browser with options optimized for both headed and headless modes
         browser = p.chromium.launch(
-            channel="chrome",
+            channel="chromium",
             headless=not args.headful,
             args=[
                 "--headless=new" if not args.headful else "",
-                "--no-sandbox",
+                "--no-sandbox", 
                 "--disable-dev-shm-usage",
             ],
         )
