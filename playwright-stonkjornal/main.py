@@ -22,7 +22,7 @@ def parse_arguments():
     p.add_argument("--action", choices=["BUY", "SELL"], default="BUY", help="Trade action (default: BUY)")
     p.add_argument("--datetime", dest="dt", help="MM/DD/YYYY,HH:MM (default: today,00:21)")
     # Runtime options
-    p.add_argument("--headful", action="store_true", help="Run in headed mode (show browser)",default=False)
+    p.add_argument("--headful", action="store_true", help="Run in headed mode (show browser)",default=True)
     return p.parse_args()
 
 def login_to_stonkjournal(page, username, password):
@@ -167,7 +167,7 @@ def verify_page_loaded_and_check_trades(page):
                     if attempt < max_retries - 1:
                         print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
                         page.reload(wait_until="domcontentloaded", timeout=30000)
-                        time.sleep(30)
+                        time.sleep(5)
                     else:
                         print("[WARN] No trades found after all retries")
                         return False, 0
