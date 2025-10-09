@@ -78,18 +78,31 @@ function processNewReports() {
             // Try to parse error response for screenshot
             let screenshotData = null;
             let screenshotName = null;
+            let errorText = errorMsg;
             try {
               const errorJson = JSON.parse(errorMsg);
-              if (errorJson.detail && typeof errorJson.detail === 'object') {
-                screenshotData = errorJson.detail.screenshot;
-                screenshotName = errorJson.detail.screenshot_name;
+              console.log('Parsed error JSON:', JSON.stringify(errorJson).substring(0, 200));
+              
+              // FastAPI wraps the detail parameter in a "detail" key
+              if (errorJson.detail) {
+                if (typeof errorJson.detail === 'object') {
+                  // detail is an object containing error, screenshot, screenshot_name
+                  screenshotData = errorJson.detail.screenshot;
+                  screenshotName = errorJson.detail.screenshot_name;
+                  errorText = errorJson.detail.error || JSON.stringify(errorJson.detail);
+                  console.log(`Screenshot found: ${screenshotName ? 'Yes - ' + screenshotName : 'No'}`);
+                } else {
+                  // detail is a simple string
+                  errorText = errorJson.detail;
+                }
               }
             } catch (e) {
-              // Not JSON or no screenshot, that's okay
+              console.log('Could not parse error as JSON:', e.message);
+              // Not JSON or no screenshot, that's okay - use raw errorMsg
             }
             
             // Send email alert about the error with screenshot if available
-            sendErrorEmail(username, filename, code, errorMsg, msg.getSubject(), msg.getDate(), screenshotData, screenshotName);
+            sendErrorEmail(username, filename, code, errorText, msg.getSubject(), msg.getDate(), screenshotData, screenshotName);
             
             // Don't label - so next run will retry
             continue;
@@ -186,17 +199,20 @@ Configured in Google Apps Script: ${ScriptApp.getScriptId()}
     // Attach screenshot if available
     if (screenshotData && screenshotName) {
       try {
+        console.log(`Attempting to attach screenshot: ${screenshotName}, data length: ${screenshotData.length}`);
         const imageBlob = Utilities.newBlob(
           Utilities.base64Decode(screenshotData),
           'image/png',
           screenshotName
         );
         emailOptions.attachments = [imageBlob];
-        console.log(`Attaching screenshot: ${screenshotName}`);
+        console.log(`✓ Successfully attached screenshot: ${screenshotName} (${imageBlob.getBytes().length} bytes)`);
       } catch (e) {
         console.error(`Failed to decode screenshot: ${e.message}`);
         // Continue without attachment
       }
+    } else {
+      console.log(`No screenshot to attach (data: ${screenshotData ? 'present' : 'missing'}, name: ${screenshotName || 'missing'})`);
     }
 
     // Send email to the user

@@ -120,6 +120,10 @@ async def ingest(request: Request):
             if run.returncode != 0:
                 logger.error(f"Script execution failed with code {run.returncode}: {output}")
                 
+                # List files in temp directory for debugging
+                temp_files = os.listdir(td)
+                logger.info(f"Files in temp directory: {temp_files}")
+                
                 # Look for screenshot files in temp directory
                 screenshot_data = None
                 screenshot_name = None
@@ -127,20 +131,26 @@ async def ingest(request: Request):
                                 "check_symbol_error.png", "trade_insert_error.png", "script_error.png"]:
                     png_path = os.path.join(td, png_file)
                     if os.path.exists(png_path):
-                        logger.info(f"Found error screenshot: {png_file}")
+                        logger.info(f"Found error screenshot: {png_file} at {png_path}")
                         with open(png_path, "rb") as f:
                             import base64
                             screenshot_data = base64.b64encode(f.read()).decode('utf-8')
                             screenshot_name = png_file
+                            logger.info(f"Screenshot {png_file} encoded to base64 ({len(screenshot_data)} chars)")
                         break
                 
+                if not screenshot_name:
+                    logger.warning("No screenshot file found in temp directory")
+                
                 # Return error with screenshot if available
-                error_response = {
+                # FastAPI wraps the detail in a "detail" key in the JSON response
+                error_detail = {
                     "error": output,
                     "screenshot": screenshot_data,
                     "screenshot_name": screenshot_name
                 }
-                raise HTTPException(status_code=500, detail=error_response)
+                logger.info(f"Returning error response with screenshot: {screenshot_name is not None}")
+                raise HTTPException(status_code=500, detail=error_detail)
             
             logger.info(f"Successfully processed {filename}")
             return PlainTextResponse((run.stdout or "OK").strip(), status_code=200)
