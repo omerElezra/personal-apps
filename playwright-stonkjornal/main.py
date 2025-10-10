@@ -22,7 +22,7 @@ def parse_arguments():
     p.add_argument("--action", choices=["BUY", "SELL"], default="BUY", help="Trade action (default: BUY)")
     p.add_argument("--datetime", dest="dt", help="MM/DD/YYYY,HH:MM (default: today,00:21)")
     # Runtime options
-    p.add_argument("--headful", action="store_true", help="Run in headed mode (show browser)",default=True)
+    p.add_argument("--headful", action="store_true", help="Run in headed mode (show browser)",default=False)
     return p.parse_args()
 
 def login_to_stonkjournal(page, username, password):
@@ -140,6 +140,49 @@ def show_open_trades(page):
             
             print(f"[ERROR] Failed to get open trades: {str(e)}")
             return False
+
+def click_load_more_until_gone(page, max_clicks=20):
+    """
+    Click "Load More" button repeatedly until it no longer exists or max clicks reached
+    
+    Args:
+        page: Playwright page object
+        max_clicks: Maximum number of times to click "Load More" (default: 20)
+    
+    Returns:
+        Number of times "Load More" was clicked
+    """
+    try:
+        print(f"\n[INFO] Clicking 'Load More' until button disappears (max {max_clicks} times)")
+        clicks = 0
+        
+        while clicks < max_clicks:
+            # Look for "Load More" button
+            load_more_btn = page.locator("span:has-text('Load More')").first
+            
+            if load_more_btn.count() == 0:
+                print(f"[INFO] ✓ 'Load More' button no longer exists after {clicks} clicks")
+                return clicks
+            
+            # Click "Load More"
+            try:
+                load_more_btn.click()
+                clicks += 1
+                print(f"[INFO] Clicked 'Load More' ({clicks}/{max_clicks})")
+                time.sleep(1)  # Wait for content to load
+            except Exception as e:
+                print(f"[WARN] Error clicking 'Load More': {e}")
+                print(f"[INFO] ✓ Completed after {clicks} clicks")
+                return clicks
+        
+        print(f"[INFO] ✓ Reached maximum clicks limit ({max_clicks})")
+        return clicks
+            
+    except Exception as e:
+        print(f"[ERROR] Error in click_load_more_until_gone: {str(e)}")
+        page.screenshot(path="load_more_error.png")
+        print("[INFO] Error screenshot saved: load_more_error.png")
+        return 0
         
 def verify_page_loaded_and_check_trades(page):
     """
@@ -756,7 +799,9 @@ if __name__ == "__main__":
                     print("[WARN] Failed to reapply filter, but continuing...")
                 
                 time.sleep(2)
-                
+                ## Click Load more until button disappears or 20 times
+                click_load_more_until_gone(page, max_clicks=20)
+
                 # Insert trade using standard flow
                 insert_success = insert_trade(page, trade)
                 
@@ -782,13 +827,13 @@ if __name__ == "__main__":
             else:
                 print(f"\n⚠ Completed with {failed_trades} failure(s)")
                         # (5) persist storage at the end of the run as well
-            AUTH_STATE_PATH = os.getenv("SJ_AUTH_STATE", "/tmp/stonkjournal-auth.json")
-            try:
-                page.wait_for_load_state("networkidle")
-                page.context.storage_state(path=AUTH_STATE_PATH)
-                print(f"[INFO] ✓ Saved storage_state to {AUTH_STATE_PATH} (post-run)")
-            except Exception as e:
-                print(f"[WARN] Could not save storage_state at end of run: {e}")
+            # AUTH_STATE_PATH = os.getenv("SJ_AUTH_STATE", "/tmp/stonkjournal-auth.json")
+            # try:
+            #     page.wait_for_load_state("networkidle")
+            #     page.context.storage_state(path=AUTH_STATE_PATH)
+            #     print(f"[INFO] ✓ Saved storage_state to {AUTH_STATE_PATH} (post-run)")
+            # except Exception as e:
+            #     print(f"[WARN] Could not save storage_state at end of run: {e}")
 
         except Exception as e:
             print(f"\n✗ Script failed with error: {str(e)}")
