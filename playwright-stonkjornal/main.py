@@ -211,6 +211,8 @@ def verify_page_loaded_and_check_trades(page):
                         print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
                         page.reload(wait_until="networkidle", timeout=30000)
                         time.sleep(10)
+                        click_load_more_until_gone(page, max_clicks=20)
+                        time.sleep(2)
                     else:
                         print("[WARN] No trades found after all retries")
                         page.screenshot(path="page_verification_error.png")
@@ -761,7 +763,7 @@ if __name__ == "__main__":
             if not login_success:
                 print("\n✗ Login failed!")
                 exit(1)
-
+            
             # Step 2: Verify page loaded and check for existing trades
             page_loaded, trades_count = verify_page_loaded_and_check_trades(page)
 
