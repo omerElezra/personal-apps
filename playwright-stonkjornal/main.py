@@ -9,7 +9,15 @@ import pytz
 from pathlib import Path
 
 def parse_arguments():
-    """Parse command line arguments for trade automation"""
+    """Parse comman                else:
+                    if attempt < max_retries - 1:
+                        print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
+                        try:
+                            page.reload(wait_until="networkidle", timeout=15000)
+                        except Exception:
+                            page.reload(wait_until="load", timeout=30000)
+                        time.sleep(3)
+                    else: arguments for trade automation"""
     p = argparse.ArgumentParser(description="StonkJournal Trade Automation (Playwright)")
     # Login
     p.add_argument("--username", required=True, help="StonkJournal username")
@@ -60,7 +68,10 @@ def login_to_stonkjournal(page, username, password):
                 print(f"[WARN] Error with email field (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     print("[INFO] 🔄 Refreshing page and retrying...")
-                    page.reload(wait_until="networkidle", timeout=30000)
+                    try:
+                        page.reload(wait_until="networkidle", timeout=15000)
+                    except Exception:
+                        page.reload(wait_until="load", timeout=30000)
                     time.sleep(2)  # Wait for page to stabilize
                 else:
                     print("[ERROR] Failed to find email field after all retries")
@@ -211,8 +222,6 @@ def verify_page_loaded_and_check_trades(page):
                         print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
                         page.reload(wait_until="networkidle", timeout=30000)
                         time.sleep(10)
-                        click_load_more_until_gone(page, max_clicks=20)
-                        time.sleep(2)
                     else:
                         print("[WARN] No trades found after all retries")
                         page.screenshot(path="page_verification_error.png")
@@ -221,7 +230,10 @@ def verify_page_loaded_and_check_trades(page):
                 print(f"[WARN] Error checking trades (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     print("[INFO] 🔄 Refreshing page and retrying...")
-                    page.reload(wait_until="networkidle", timeout=30000)
+                    try:
+                        page.reload(wait_until="networkidle", timeout=15000)
+                    except Exception:
+                        page.reload(wait_until="load", timeout=30000)
                     time.sleep(2)  # Wait for page to stabilize
                 else:
                     print("[ERROR] Failed to verify page load after all retries")        
@@ -763,7 +775,7 @@ if __name__ == "__main__":
             if not login_success:
                 print("\n✗ Login failed!")
                 exit(1)
-            
+
             # Step 2: Verify page loaded and check for existing trades
             page_loaded, trades_count = verify_page_loaded_and_check_trades(page)
 
@@ -791,7 +803,11 @@ if __name__ == "__main__":
                 
                 # Reload page and filter open trades before each trade insertion
                 print("\n[INFO] Reloading page and filtering open trades before trade insertion...")
-                page.reload(wait_until="networkidle", timeout=30000)
+                try:
+                    page.reload(wait_until="networkidle", timeout=15000)
+                except Exception as e:
+                    print(f"[WARN] networkidle timeout, falling back to load: {e}")
+                    page.reload(wait_until="load", timeout=30000)
                 time.sleep(2)
                 
                 # Reapply open trades filter
