@@ -60,8 +60,8 @@ def login_to_stonkjournal(page, username, password):
                 print(f"[WARN] Error with email field (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     print("[INFO] 🔄 Refreshing page and retrying...")
-                    page.reload(wait_until="domcontentloaded", timeout=30000)
-                    time.sleep(3)  # Wait for page to stabilize
+                    page.reload(wait_until="networkidle", timeout=30000)
+                    time.sleep(2)  # Wait for page to stabilize
                 else:
                     print("[ERROR] Failed to find email field after all retries")
         
@@ -209,17 +209,18 @@ def verify_page_loaded_and_check_trades(page):
                 else:
                     if attempt < max_retries - 1:
                         print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
-                        page.reload(wait_until="domcontentloaded", timeout=30000)
-                        time.sleep(5)
+                        page.reload(wait_until="networkidle", timeout=30000)
+                        time.sleep(3)
                     else:
                         print("[WARN] No trades found after all retries")
+                        page.screenshot(path="page_verification_error.png")
                         return False, 0
             except Exception as e:
                 print(f"[WARN] Error checking trades (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     print("[INFO] 🔄 Refreshing page and retrying...")
-                    page.reload(wait_until="domcontentloaded", timeout=30000)
-                    time.sleep(3)  # Wait for page to stabilize
+                    page.reload(wait_until="networkidle", timeout=30000)
+                    time.sleep(2)  # Wait for page to stabilize
                 else:
                     print("[ERROR] Failed to verify page load after all retries")        
         return False, 0
@@ -788,7 +789,7 @@ if __name__ == "__main__":
                 
                 # Reload page and filter open trades before each trade insertion
                 print("\n[INFO] Reloading page and filtering open trades before trade insertion...")
-                page.reload(wait_until="domcontentloaded", timeout=30000)
+                page.reload(wait_until="networkidle", timeout=30000)
                 time.sleep(2)
                 
                 # Reapply open trades filter
