@@ -226,7 +226,8 @@ def verify_page_loaded_and_check_trades(page):
                         page.goto("https://app.stonkjournal.com/dashboard", wait_until="load", timeout=30000)
                         time.sleep(3)
                         continue
-                
+                click_load_more_until_gone(page, max_clicks=20)
+                time.sleep(2)
                 # Check if any trades exist
                 print("[INFO] Checking for existing trades...")
                 
@@ -281,8 +282,6 @@ def verify_page_loaded_and_check_trades(page):
                         except Exception:
                             page.reload(wait_until="load", timeout=30000)
                         time.sleep(3)
-                        click_load_more_until_gone(page, max_clicks=20)
-                        time.sleep(2)
                     else:
                         print(f"[ERROR] Only {trades_count} trades found after all retries")
                         print("[ERROR] DB might not be connected! Trades won't persist!")
