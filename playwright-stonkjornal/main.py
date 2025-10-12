@@ -117,16 +117,27 @@ def login_to_stonkjournal(page, username, password):
             except:
                 pass
 
-        time.sleep(3)
+        # Wait longer for dashboard data to load (especially in Cloud Run)
+        print("[INFO] Waiting for dashboard data to load...")
+        time.sleep(5)
+        
+        # Try to wait for network to settle
+        try:
+            page.wait_for_load_state("networkidle", timeout=10000)
+            print("[INFO] ✓ Network idle after login")
+        except Exception as e:
+            print(f"[WARN] Network idle timeout after login: {e}")
+        
+        # Save auth state for future runs
         AUTH_STATE_PATH = os.getenv("SJ_AUTH_STATE", "/tmp/stonkjournal-auth.json")
         try:
-            page.wait_for_load_state("networkidle")
             page.context.storage_state(path=AUTH_STATE_PATH)
             print(f"[INFO] ✓ Saved storage_state to {AUTH_STATE_PATH}")
         except Exception as e:
             print(f"[WARN] Could not save storage_state after login: {e}")
+            
         return True
-
+       
     except Exception as e:
         print(f"[ERROR] Login failed: {str(e)}")
         page.screenshot(path="stonkjournal_error.png")
@@ -231,6 +242,23 @@ def verify_page_loaded_and_check_trades(page):
                 # Check if any trades exist
                 print("[INFO] Checking for existing trades...")
                 
+                # Wait a bit for dynamic content to load
+                print("[INFO] Waiting for dynamic content to load...")
+                time.sleep(2)
+                
+                # Try to wait for network to be idle (trades should load via API)
+                try:
+                    print("[INFO] Waiting for network idle...")
+                    page.wait_for_load_state("networkidle", timeout=10000)
+                    print("[INFO] ✓ Network idle achieved")
+                except Exception as e:
+                    print(f"[WARN] Network idle timeout: {e}")
+                
+                # Click "Load More" to ensure all trades are loaded
+                print("[INFO] Clicking 'Load More' to load all trades...")
+                click_load_more_until_gone(page, max_clicks=20)
+                time.sleep(2)
+                
                 # First, try to find the trades table
                 print("[INFO] Looking for trades table...")
                 trades_table = page.locator(".trades-table, #trades-table, table.trades, table").first
@@ -241,19 +269,29 @@ def verify_page_loaded_and_check_trades(page):
                     # Get the HTML of the trades table for debugging
                     try:
                         table_html = trades_table.inner_html()
-                        print(f"[DEBUG] ===== TRADES TABLE HTML (first 100 chars) =====")
-                        print(table_html[:100])
+                        print(f"[DEBUG] ===== TRADES TABLE HTML (first 500 chars) =====")
+                        print(table_html[:500])
                         print(f"[DEBUG] ===== END TABLE HTML =====")
                         print(f"[DEBUG] Total table HTML length: {len(table_html)} characters")
+                        
+                        # Check if table has tbody with rows
+                        tbody_rows = page.locator("table tbody tr").all()
+                        print(f"[DEBUG] Found {len(tbody_rows)} rows in tbody")
+                        
                     except Exception as e:
                         print(f"[WARN] Could not get table HTML: {e}")
                     
                     # Get table text content
                     try:
                         table_text = trades_table.text_content()
-                        print(f"[DEBUG] ===== TRADES TABLE TEXT =====")
+                        print(f"[DEBUG] ===== TRADES TABLE TEXT (first 500 chars) =====")
                         print(table_text[:500])
                         print(f"[DEBUG] ===== END TABLE TEXT =====")
+                        
+                        # Check for common indicators of empty table
+                        if "no trades" in table_text.lower() or "no data" in table_text.lower():
+                            print("[WARN] Table appears to have 'no data' message")
+                            
                     except Exception as e:
                         print(f"[WARN] Could not get table text: {e}")
                 else:
@@ -271,12 +309,27 @@ def verify_page_loaded_and_check_trades(page):
                 
                 print(f"[INFO] Found {trades_count} potential trade row(s)")
                 
+                # Debug: Check for loading indicators or error messages
+                try:
+                    loading_indicator = page.locator("[class*='loading'], [class*='spinner'], .loader").first
+                    if loading_indicator.count() > 0:
+                        print("[WARN] Loading indicator still visible - data may still be loading")
+                    
+                    error_msg = page.locator("[class*='error'], .error-message, .alert-danger").first
+                    if error_msg.count() > 0:
+                        error_text = error_msg.text_content()
+                        print(f"[ERROR] Error message found on page: {error_text}")
+                except Exception:
+                    pass
+                
                 if trades_count > 1:
                     print(f"[INFO] ✓ Found {trades_count} trade(s) on the page - DB CONNECTION OK")
                     return True, trades_count
                 else:
                     if attempt < max_retries - 1:
                         print(f"[WARN] Only {trades_count} trades found (need >1 to verify DB connection). Refreshing page and retrying...")
+                        print(f"[INFO] Waiting {5 + attempt * 2} seconds before retry to allow more time for data loading...")
+                        time.sleep(5 + attempt * 2)  # Progressive wait: 5, 7, 9, 11, 13 seconds...
                         try:
                             page.reload(wait_until="networkidle", timeout=15000)
                         except Exception:
