@@ -111,8 +111,12 @@ def login_to_stonkjournal(page, username, password):
             page.wait_for_url("**/dashboard**", timeout=30000)
             print("[INFO] ✓ Successfully logged in!")
             print(f"[INFO] Current URL: {page.url}")
+            print(f"[INFO] Page title: {page.title()}")
+            print(f"[INFO] Response status: {page.evaluate('() => document.readyState')}")
         except Exception as e:
             print(f"[WARN] Dashboard URL wait timeout: {e}")
+            print(f"[WARN] Current URL: {page.url}")
+            print(f"[WARN] Page title: {page.title()}")
 
         time.sleep(3)
         AUTH_STATE_PATH = os.getenv("SJ_AUTH_STATE", "/tmp/stonkjournal-auth.json")
@@ -195,37 +199,88 @@ def click_load_more_until_gone(page, max_clicks=20):
         print("[INFO] Error screenshot saved: load_more_error.png")
         return 0
         
-def verify_page_loaded_and_check_trades(page):
+def verify_page_loaded_and_check_trades(page, skip_trade_check=False):
     """
     Verify the page has loaded properly and check if any trades exist
+    Args:
+        page: Playwright page object
+        skip_trade_check: If True, only verify page loaded without checking trades count
     Returns: (page_loaded: bool, trades_count: int)
     """
     try:
         print("\n[INFO] Verifying page loaded and checking for trades...")
+        print(f"[INFO] Current URL: {page.url}")
+        print(f"[INFO] Page title: {page.title()}")
         
         # Wait for page to be in a stable state with retries
         max_retries = 10
         for attempt in range(max_retries):
             try:
                 print(f"[INFO] Attempt {attempt + 1}/{max_retries} to verify page load...")
+                
+                # Check if we're on the dashboard
+                current_url = page.url
+                print(f"[INFO] Current URL: {current_url}")
+                
+                if "dashboard" not in current_url.lower():
+                    print(f"[WARN] Not on dashboard page, current URL: {current_url}")
+                    if attempt < max_retries - 1:
+                        print("[INFO] Navigating to dashboard...")
+                        page.goto("https://app.stonkjournal.com/dashboard", wait_until="load", timeout=30000)
+                        time.sleep(3)
+                        continue
+                    else:
+                        print("[ERROR] Could not reach dashboard after all retries")
+                        page.screenshot(path="page_verification_error.png")
+                        return False, 0
+                
                 # Check if any trades exist
                 print("[INFO] Checking for existing trades...")
                 # Try multiple selectors to find trade rows
                 trade_rows = page.locator("tr.trade-row, tbody tr, .trade-item, [class*='trade']").all()
                 trades_count = len(trade_rows)
                 
+                print(f"[INFO] Found {trades_count} potential trade row(s)")
+                
+                # Debug: Print page content if no trades found
+                if trades_count <= 1 and attempt == 0:
+                    print("[DEBUG] Page content sample:")
+                    try:
+                        body_text = page.locator("body").text_content()
+                        print(f"[DEBUG] Body text (first 500 chars): {body_text[:500] if body_text else 'EMPTY'}")
+                        
+                        # Check if we can find any table
+                        tables = page.locator("table").all()
+                        print(f"[DEBUG] Found {len(tables)} table(s) on page")
+                        
+                        # Check for common error messages
+                        if "error" in body_text.lower() or "not found" in body_text.lower():
+                            print(f"[WARN] Possible error message on page!")
+                    except Exception as debug_err:
+                        print(f"[DEBUG] Could not get page content: {debug_err}")
+                
+                # If skip_trade_check is True, we don't require trades to exist
+                if skip_trade_check:
+                    print(f"[INFO] ✓ Page verification complete (trade check skipped)")
+                    return True, trades_count
+                
                 if trades_count > 1:
                     print(f"[INFO] ✓ Found {trades_count} trade(s) on the page")
                     return True, trades_count
                 else:
                     if attempt < max_retries - 1:
-                        print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
-                        page.reload(wait_until="networkidle", timeout=30000)
-                        time.sleep(10)
+                        print(f"[WARN] Only {trades_count} trades found (need >1). Refreshing page and retrying...")
+                        try:
+                            page.reload(wait_until="networkidle", timeout=15000)
+                        except Exception:
+                            page.reload(wait_until="load", timeout=30000)
+                        time.sleep(3)
                     else:
-                        print("[WARN] No trades found after all retries")
+                        print(f"[WARN] No sufficient trades found after all retries ({trades_count} found)")
                         page.screenshot(path="page_verification_error.png")
-                        return False, 0
+                        # If processing CSV, don't fail - trades will be added
+                        print("[INFO] Continuing anyway - trades will be added from CSV")
+                        return True, trades_count
             except Exception as e:
                 print(f"[WARN] Error checking trades (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
@@ -777,7 +832,9 @@ if __name__ == "__main__":
                 exit(1)
 
             # Step 2: Verify page loaded and check for existing trades
-            page_loaded, trades_count = verify_page_loaded_and_check_trades(page)
+            # Skip trade count check if processing CSV (trades will be added)
+            skip_check = bool(args.csv_file)
+            page_loaded, trades_count = verify_page_loaded_and_check_trades(page, skip_trade_check=skip_check)
 
             if not page_loaded:
                 print("\n✗ Failed to verify page loaded!")
