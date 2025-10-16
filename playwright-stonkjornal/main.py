@@ -2,15 +2,56 @@
 import argparse
 from datetime import datetime
 import os
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright , TimeoutError, Page
 import time
 import csv
 import pytz
 from pathlib import Path
+URL = "https://app.stonkjournal.com/dashboard"
 
+def click_or_click_here(page: Page, *, open_same_tab: bool = False, timeout: int = 6000) -> Page:
 
-def parse_arguments():
-    """Parse command line arguments for trade automation"""
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(300)  # allow animation
+
+    def _try_click(loc):
+        loc.wait_for(state="visible", timeout=min(2500, timeout))
+        if open_same_tab:
+            # force same tab
+            try:
+                loc.evaluate("el => el.target = '_self'")
+            except Exception:
+                pass
+            loc.click()
+            page.wait_for_load_state("load")
+            return page
+        else:
+            with page.context.expect_page() as pop:
+                loc.click()
+            newp = pop.value
+            newp.wait_for_load_state("domcontentloaded")
+            return newp
+
+    selectors = [
+        lambda c: c.locator("a.cta-link", has_text="or click here"),
+    ]
+
+    for frame in page.frames:
+        if frame is page.main_frame:
+            continue
+        if frame.name == "sleek-widget":
+            for build in selectors:
+                try:
+                    print(f"Trying selector in iframe: {build} , working...")
+                    return _try_click(build(frame))
+                except TimeoutError:
+                    continue
+                except Exception:
+                    continue
+    raise RuntimeError('Could not locate/click the "or click here" link.')
+
+def parse_arguments(): 
+                # Additional wait for network to settlearguments for trade automation"""
     p = argparse.ArgumentParser(description="StonkJournal Trade Automation (Playwright)")
     # Login
     p.add_argument("--username", required=True, help="StonkJournal username")
@@ -23,7 +64,7 @@ def parse_arguments():
     p.add_argument("--action", choices=["BUY", "SELL"], default="BUY", help="Trade action (default: BUY)")
     p.add_argument("--datetime", dest="dt", help="MM/DD/YYYY,HH:MM (default: today,00:21)")
     # Runtime options
-    p.add_argument("--headful", action="store_true", help="Run in headed mode (show browser)")
+    p.add_argument("--headful", action="store_true", help="Run in headed mode (show browser)",default=False)
     return p.parse_args()
 
 def login_to_stonkjournal(page, username, password):
@@ -109,7 +150,7 @@ def login_to_stonkjournal(page, username, password):
         time.sleep(10)
         
         return True
-
+       
     except Exception as e:
         print(f"[ERROR] Login failed: {str(e)}")
         page.screenshot(path="stonkjournal_error.png")
@@ -137,36 +178,88 @@ def show_open_trades(page):
             
             print(f"[ERROR] Failed to get open trades: {str(e)}")
             return False
+
+def click_load_more_until_gone(page, max_clicks=20):
+    try:
+        print(f"\n[INFO] Clicking 'Load More' until button disappears (max {max_clicks} times)")
+        clicks = 0
+        
+        while clicks < max_clicks:
+            # Look for "Load More" button
+            load_more_btn = page.locator("span:has-text('Load More')")
+            
+            if load_more_btn.count() == 0:
+                print(f"[INFO] ✓ 'Load More' button no longer exists after {clicks} clicks")
+                return clicks
+            
+            # Click "Load More"
+            try:
+                load_more_btn.click()
+                clicks += 1
+                print(f"[INFO] Clicked 'Load More' ({clicks}/{max_clicks})")
+                time.sleep(3)  # Wait for content to load
+            except Exception as e:
+                print(f"[WARN] Error clicking 'Load More': {e}")
+                print(f"[INFO] ✓ Completed after {clicks} clicks")
+                return clicks
+        
+        print(f"[INFO] ✓ Reached maximum clicks limit ({max_clicks})")
+        return clicks
+            
+    except Exception as e:
+        print(f"[ERROR] Error in click_load_more_until_gone: {str(e)}")
+        page.screenshot(path="load_more_error.png")
+        print("[INFO] Error screenshot saved: load_more_error.png")
+        return 0
         
 def verify_page_loaded_and_check_trades(page):
-    """
-    Verify the page has loaded properly and check if any trades exist
-    Returns: (page_loaded: bool, trades_count: int)
-    """
     try:
         print("\n[INFO] Verifying page loaded and checking for trades...")
         
         # Wait for page to be in a stable state with retries
-        max_retries = 5
+        max_retries = 10
+        
         for attempt in range(max_retries):
             try:
-                print(f"[INFO] Attempt {attempt + 1}/{max_retries} to verify page load...")
                 # Check if any trades exist
                 print("[INFO] Checking for existing trades...")
                 # Try multiple selectors to find trade rows
                 trade_rows = page.locator("tr.trade-row, tbody tr, .trade-item, [class*='trade']").all()
                 trades_count = len(trade_rows)
-                
+                print(f"[INFO] Found {trades_count} potential trade row(s)")
                 if trades_count > 1:
                     print(f"[INFO] ✓ Found {trades_count} trade(s) on the page")
                     return True, trades_count
                 else:
-                    if attempt < max_retries - 1:
-                        print("[WARN] No trades found. Refreshing page and retrying...")
+                    if attempt == 0:
+                        fix_click = click_or_click_here(page, open_same_tab=True) 
+                        page = fix_click or page
+                        page.bring_to_front()
+                    elif attempt < max_retries - 1:
+                        print(f"[WARN] No trades found. Refreshing page and retrying... {trades_count} trades found")
+                        page.screenshot(path=f"page_verification_attempt_{attempt + 1}.png")
+                        print(f"[INFO] Screenshot saved: page_verification_attempt_{attempt + 1}.png")
+                        time.sleep(1)
+                        dup = page.context.new_page()
+                        dup.goto(page.url, wait_until="domcontentloaded")
+                        time.sleep(5)
+                        dup.close()
                         page.reload(wait_until="domcontentloaded", timeout=30000)
-                        time.sleep(3)
+                        time.sleep(5)
                     else:
-                        print("[WARN] No trades found after all retries")
+                        print("[ERROR] No trades found after all retries")
+                        print("[ERROR] Page appears stuck on loading or DB not connected")
+                        page.screenshot(path="page_verification_error_final.png")
+                        print("[INFO] Final screenshot saved: page_verification_error_final.png")
+                        
+                        try:
+                            body_text = page.locator("body").text_content()
+                            print(f"[DEBUG] Page body text (first 500 chars): {body_text[:500]}")
+                            if "loading" in body_text.lower():
+                                print("[ERROR] Page is still showing loading indicator!")
+                        except:
+                            pass
+                        
                         return False, 0
             except Exception as e:
                 print(f"[WARN] Error checking trades (attempt {attempt + 1}/{max_retries}): {e}")
@@ -491,7 +584,7 @@ def parse_csv_file(csv_file_path):
                     
                     for row in csv_reader:
                         # Filter only EXECUTION level of detail AND USD currency
-                        if row.get('LevelOfDetail') == 'EXECUTION' and row.get('CurrencyPrimary') == 'USD':
+                        if row.get('LevelOfDetail') == 'EXECUTION' and row.get('CurrencyPrimary') == 'USD' and row.get('SubCategory') == 'COMMON':
                             execution = {
                                 'Symbol': row.get('Symbol', ''),
                                 'DateTime': row.get('DateTime', ''),
@@ -692,7 +785,7 @@ if __name__ == "__main__":
             if not login_success:
                 print("\n✗ Login failed!")
                 exit(1)
-
+            
             # Step 2: Verify page loaded and check for existing trades
             page_loaded, trades_count = verify_page_loaded_and_check_trades(page)
 
@@ -702,7 +795,7 @@ if __name__ == "__main__":
             
             print(f"\n[INFO] Page verified with {trades_count} trade(s) displayed")
             
-            # Step 4: Process all trades in sequence
+            # Step 3: Process all trades in sequence
             successful_trades = 0
             failed_trades = 0
             total_trades = len(trades_to_process)
@@ -731,7 +824,9 @@ if __name__ == "__main__":
                     print("[WARN] Failed to reapply filter, but continuing...")
                 
                 time.sleep(2)
-                
+                ## Click Load more until button disappears or 20 times
+                click_load_more_until_gone(page, max_clicks=20)
+
                 # Insert trade using standard flow
                 insert_success = insert_trade(page, trade)
                 
