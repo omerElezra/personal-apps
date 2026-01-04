@@ -2,6 +2,7 @@
 import argparse
 from datetime import datetime
 import os
+from re import I
 from playwright.sync_api import sync_playwright , TimeoutError, Page
 import time
 import csv
@@ -157,6 +158,28 @@ def login_to_stonkjournal(page, username, password):
         print("[INFO] Error screenshot saved: stonkjournal_error.png")
         return False
 
+def get_open_trades_count(page):
+    """
+    Get the number of open trades from the dashboard
+    Returns the count as an integer, or None if not found
+    """
+    try:
+        print("\n[INFO] Getting open trades count...")
+        
+        # Find the "Open trades" text and get the following sibling element
+        open_trades_element = page.get_by_text("OPEN", exact=True).locator("xpath=following-sibling::*[1]").first
+        open_trades_element.wait_for(state="visible", timeout=10000)
+        
+        open_trades_text = open_trades_element.text_content()
+        open_trades_count = int(open_trades_text.strip())
+        
+        print(f"[INFO] ✓ Open trades count: {open_trades_count}")
+        return open_trades_count
+        
+    except Exception as e:
+        print(f"[WARN] Could not get open trades count: {e}")
+        return None
+
 def show_open_trades(page):
     """
     Filter trades to show only open trades
@@ -181,15 +204,29 @@ def show_open_trades(page):
 
 def click_load_more_until_gone(page, max_clicks=20):
     try:
+        print("DEBUG: STARTING Load More clicks before trade insertion func")
         print(f"\n[INFO] Clicking 'Load More' until button disappears (max {max_clicks} times)")
         clicks = 0
         
         while clicks < max_clicks:
+            print(f"DEBUG: Load More enter to while")
+            time.sleep(3)
             # Look for "Load More" button
             load_more_btn = page.locator("span:has-text('Load More')")
             
             if load_more_btn.count() == 0:
                 print(f"[INFO] ✓ 'Load More' button no longer exists after {clicks} clicks")
+                if clicks == 0:
+                    open_trades_value = page.locator("div.text-rh-green.text-center").first
+                    if open_trades_value.count() > 0:
+                        value = open_trades_value.text_content().strip()
+                        print(f"[WARN] Open trades value from div: {value}")
+                        # Reload the page to fix the bug
+                        page.reload(wait_until="domcontentloaded", timeout=30000)
+                        show_open_trades(page)
+                        time.sleep(2)
+                        click_load_more_until_gone(page, max_clicks=20)
+                        time.sleep(2)
                 return clicks
             
             # Click "Load More"
@@ -221,9 +258,11 @@ def verify_page_loaded_and_check_trades(page):
         
         for attempt in range(max_retries):
             try:
+                time.sleep(5)
                 # Check if any trades exist
                 print("[INFO] Checking for existing trades...")
                 # Try multiple selectors to find trade rows
+                
                 trade_rows = page.locator("tr.trade-row, tbody tr, .trade-item, [class*='trade']").all()
                 trades_count = len(trade_rows)
                 print(f"[INFO] Found {trades_count} potential trade row(s)")
@@ -245,7 +284,6 @@ def verify_page_loaded_and_check_trades(page):
                         time.sleep(5)
                         dup.close()
                         page.reload(wait_until="domcontentloaded", timeout=30000)
-                        time.sleep(5)
                     else:
                         print("[ERROR] No trades found after all retries")
                         print("[ERROR] Page appears stuck on loading or DB not connected")
@@ -583,8 +621,8 @@ def parse_csv_file(csv_file_path):
                     csv_reader = csv.DictReader(file)
                     
                     for row in csv_reader:
-                        # Filter only EXECUTION level of detail AND USD currency
-                        if row.get('LevelOfDetail') == 'EXECUTION' and row.get('CurrencyPrimary') == 'USD' and row.get('SubCategory') == 'COMMON':
+                        # Filter only EXECUTION level of detail AND USD currency AND non-empty SubCategory
+                        if row.get('LevelOfDetail') == 'EXECUTION' and row.get('CurrencyPrimary') == 'USD' and row.get('SubCategory') != '':
                             execution = {
                                 'Symbol': row.get('Symbol', ''),
                                 'DateTime': row.get('DateTime', ''),
@@ -799,6 +837,10 @@ if __name__ == "__main__":
             successful_trades = 0
             failed_trades = 0
             total_trades = len(trades_to_process)
+            # Step 1.5: Get open trades count
+            open_trades_count = get_open_trades_count(page)
+            if open_trades_count is not None:
+                print(f"\n[INFO] Dashboard shows {open_trades_count} open trade(s)")
             
             for idx, trade in enumerate(trades_to_process, 1):
                 print(f"\n{'=' * 60}")
@@ -823,20 +865,20 @@ if __name__ == "__main__":
                 else:
                     print("[WARN] Failed to reapply filter, but continuing...")
                 
-                time.sleep(2)
                 ## Click Load more until button disappears or 20 times
+                print("DEBUG: STARTING Load More clicks before trade insertion")
                 click_load_more_until_gone(page, max_clicks=20)
-
+                print("DEBUG: COMPLETED Load More clicks before trade insertion")
+                time.sleep(2)
                 # Insert trade using standard flow
                 insert_success = insert_trade(page, trade)
-                
                 if insert_success:
                     successful_trades += 1
                     print(f"✓ Trade {idx} completed successfully!")
                 else:
                     failed_trades += 1
                     print(f"✗ Trade {idx} failed!")
-                time.sleep(5)
+                time.sleep(2)
             
             # Summary
             print(f"\n{'=' * 60}")
