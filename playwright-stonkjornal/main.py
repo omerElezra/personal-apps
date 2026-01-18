@@ -339,8 +339,9 @@ def check_symbol_in_open_trades(page, symbol):
                 # Get the text content of the row
                 row_text = row.text_content()
                 
-                # Check if the symbol exists in this row
-                if symbol.upper() in row_text.upper():
+                # Check if the symbol equals to the first sting in row_text and delete ' from it
+                symbol_in_row = row_text.strip().split()[0].upper().replace("'", "")
+                if symbol.upper() == symbol_in_row:
                     print(f"[INFO] ✓ Found symbol '{symbol}' in row {i + 1}")
                     print(f"[INFO] Row content: {row_text.strip()}")
                     
